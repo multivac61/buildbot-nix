@@ -148,23 +148,7 @@ def list_effects(opts: EffectsOptions) -> list[str]:
         "eval",
         "--json",
         "--expr",
-        f"""
-        let
-          effects = {effect_function(opts)};
-          isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
-          checkRunnable = v:
-            if isDerivation v then
-              true
-            else if builtins.isAttrs v && v ? run then
-              isDerivation v.run
-            else
-              false;
-          isRunnable = name:
-            let result = builtins.tryEval (checkRunnable effects.${{name}});
-            in result.success && result.value;
-        in
-          builtins.filter isRunnable (builtins.attrNames effects)
-        """,
+        f"builtins.attrNames ({effect_function(opts)})",
     )
     proc = run(cmd, stdout=subprocess.PIPE, debug=opts.debug)
     return json.loads(proc.stdout)
@@ -182,24 +166,10 @@ def list_scheduled_effects(opts: EffectsOptions) -> dict[str, Any]:
         f"""
         let
           schedules = {scheduled_effect_function(opts)};
-          isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
-          checkRunnable = v:
-            if isDerivation v then
-              true
-            else if builtins.isAttrs v && v ? run then
-              isDerivation v.run
-            else
-              false;
-          effectNames = effects:
-            let
-              isRunnable = name:
-                let result = builtins.tryEval (checkRunnable effects.${{name}});
-                in result.success && result.value;
-            in builtins.filter isRunnable (builtins.attrNames effects);
         in
           builtins.mapAttrs (name: schedule: {{
             when = schedule.when or {{}};
-            effects = effectNames (schedule.outputs.effects or {{}});
+            effects = builtins.attrNames (schedule.outputs.effects or {{}});
           }}) schedules
         """,
     )
