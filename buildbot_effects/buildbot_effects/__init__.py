@@ -152,18 +152,18 @@ def list_effects(opts: EffectsOptions) -> list[str]:
         let
           effects = {effect_function(opts)};
           isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
-          isRunnable = v:
-            let result = builtins.tryEval (
-              if isDerivation v then
-                true
-              else if builtins.isAttrs v && v ? run then
-                isDerivation v.run
-              else
-                false
-            );
+          checkRunnable = v:
+            if isDerivation v then
+              true
+            else if builtins.isAttrs v && v ? run then
+              isDerivation v.run
+            else
+              false;
+          isRunnable = name:
+            let result = builtins.tryEval (checkRunnable effects.${{name}});
             in result.success && result.value;
         in
-          builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects)
+          builtins.filter isRunnable (builtins.attrNames effects)
         """,
     )
     proc = run(cmd, stdout=subprocess.PIPE, debug=opts.debug)
@@ -183,18 +183,19 @@ def list_scheduled_effects(opts: EffectsOptions) -> dict[str, Any]:
         let
           schedules = {scheduled_effect_function(opts)};
           isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
-          isRunnable = v:
-            let result = builtins.tryEval (
-              if isDerivation v then
-                true
-              else if builtins.isAttrs v && v ? run then
-                isDerivation v.run
-              else
-                false
-            );
-            in result.success && result.value;
+          checkRunnable = v:
+            if isDerivation v then
+              true
+            else if builtins.isAttrs v && v ? run then
+              isDerivation v.run
+            else
+              false;
           effectNames = effects:
-            builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects);
+            let
+              isRunnable = name:
+                let result = builtins.tryEval (checkRunnable effects.${{name}});
+                in result.success && result.value;
+            in builtins.filter isRunnable (builtins.attrNames effects);
         in
           builtins.mapAttrs (name: schedule: {{
             when = schedule.when or {{}};
