@@ -148,7 +148,20 @@ def list_effects(opts: EffectsOptions) -> list[str]:
         "eval",
         "--json",
         "--expr",
-        f"builtins.attrNames ({effect_function(opts)})",
+        f"""
+        let
+          effects = {effect_function(opts)};
+          isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
+          isRunnable = v:
+            if isDerivation v then
+              true
+            else if builtins.isAttrs v && v ? run then
+              isDerivation v.run
+            else
+              false;
+        in
+          builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects)
+        """,
     )
     proc = run(cmd, stdout=subprocess.PIPE, debug=opts.debug)
     return json.loads(proc.stdout)
@@ -166,10 +179,20 @@ def list_scheduled_effects(opts: EffectsOptions) -> dict[str, Any]:
         f"""
         let
           schedules = {scheduled_effect_function(opts)};
+          isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
+          isRunnable = v:
+            if isDerivation v then
+              true
+            else if builtins.isAttrs v && v ? run then
+              isDerivation v.run
+            else
+              false;
+          effectNames = effects:
+            builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects);
         in
           builtins.mapAttrs (name: schedule: {{
             when = schedule.when or {{}};
-            effects = builtins.attrNames (schedule.outputs.effects or {{}});
+            effects = effectNames (schedule.outputs.effects or {{}});
           }}) schedules
         """,
     )
@@ -181,7 +204,18 @@ def instantiate_effects(effect: str, opts: EffectsOptions) -> str:
     cmd = [
         "nix-instantiate",
         "--expr",
-        f"({effect_function(opts)}).{effect}",
+        f"""
+          let
+            effect = ({effect_function(opts)}).{effect};
+            isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
+          in
+            if isDerivation effect then
+              effect
+            else if builtins.isAttrs effect && effect ? run && isDerivation effect.run then
+              effect.run
+            else
+              []
+        """,
     ]
     proc = run(cmd, stdout=subprocess.PIPE, debug=opts.debug)
     return proc.stdout.rstrip()
@@ -194,7 +228,18 @@ def instantiate_scheduled_effect(
     cmd = [
         "nix-instantiate",
         "--expr",
-        f"({scheduled_effect_function(opts)}).{schedule_name}.outputs.effects.{effect}",
+        f"""
+          let
+            effect = ({scheduled_effect_function(opts)}).{schedule_name}.outputs.effects.{effect};
+            isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
+          in
+            if isDerivation effect then
+              effect
+            else if builtins.isAttrs effect && effect ? run && isDerivation effect.run then
+              effect.run
+            else
+              []
+        """,
     ]
     proc = run(cmd, stdout=subprocess.PIPE, debug=opts.debug)
     return proc.stdout.rstrip()
