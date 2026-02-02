@@ -153,12 +153,15 @@ def list_effects(opts: EffectsOptions) -> list[str]:
           effects = {effect_function(opts)};
           isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
           isRunnable = v:
-            if isDerivation v then
-              true
-            else if builtins.isAttrs v && v ? run then
-              isDerivation v.run
-            else
-              false;
+            let result = builtins.tryEval (
+              if isDerivation v then
+                true
+              else if builtins.isAttrs v && v ? run then
+                isDerivation v.run
+              else
+                false
+            );
+            in result.success && result.value;
         in
           builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects)
         """,
@@ -181,12 +184,15 @@ def list_scheduled_effects(opts: EffectsOptions) -> dict[str, Any]:
           schedules = {scheduled_effect_function(opts)};
           isDerivation = v: builtins.isAttrs v && v ? type && v.type == "derivation";
           isRunnable = v:
-            if isDerivation v then
-              true
-            else if builtins.isAttrs v && v ? run then
-              isDerivation v.run
-            else
-              false;
+            let result = builtins.tryEval (
+              if isDerivation v then
+                true
+              else if builtins.isAttrs v && v ? run then
+                isDerivation v.run
+              else
+                false
+            );
+            in result.success && result.value;
           effectNames = effects:
             builtins.filter (name: isRunnable effects.${{name}}) (builtins.attrNames effects);
         in
